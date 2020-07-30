@@ -184,7 +184,7 @@ obtain_trait <- function(efolist, efoindex, append = T){
     }
   }
   
-  ##v0.1.2添加修改
+  ##add in v0.1.2
   if(!append){
     TMP_EFO_LIST = TMP_EFO_LIST[dim(TMP_EFO_LIST)[1],]
   }
