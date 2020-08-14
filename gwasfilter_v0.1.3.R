@@ -1,7 +1,7 @@
 # gwasfilter
 # Functions: Filtering genome-wide association studies & Obtaining related SNP-trait associations database from GWAS Catalog
 # Date of release: 2020-07-10
-# Authors: Chongyang Li (Dalian Maritime University) & Songchun Yang (Peking University)
+# Authors:  Songchun Yang (Peking University) & Chongyang Li (Dalian Maritime University) 
 # Version: 0.1.3
 #==========================================================================================================
 message("==================================================================================================")
@@ -115,7 +115,7 @@ get_gwasdata <- function(path, checknew=TRUE) {
   catalog_ances$is_TRA <- ifelse(catalog_ances$ances_count>1, 1, 0)
   save(catalog_ances, file="catalog_ancestry.RData")
   
-  asso <- as.data.frame(catalog_df[[2]][, c(37, 12, 13, 21, 27, 22, 31, 32, 28, 30)])
+  asso <- as.data.frame(catalog_df[[2]][, c(37, 11, 12, 13, 15, 21, 27, 22, 25, 31, 32, 28, 30)])
   EA <- as.data.frame(str_split_fixed(asso$`STRONGEST SNP-RISK ALLELE`, "-", 2), stringsAsFactors=F)
   asso$EA <- as.character(EA[,2])
   asso[grep("increase", asso$`95% CI (TEXT)`), "beta_symbol"] <- 1
@@ -128,8 +128,8 @@ get_gwasdata <- function(path, checknew=TRUE) {
   CI3 <- as.data.frame(str_split_fixed(CI2, "-", 2))
   asso$LCI <- as.numeric(as.character(CI3[,1]))
   asso$UCI <- as.numeric(as.character(CI3[,2]))
-  asso.org <- subset(asso, select=c(1,2,3,6,11,5,13:16,9,10))
-  colnames(asso.org) <- c("STUDY ACCESSION","Chr","Pos(hg38)","rsid","Effect_allele","Effect_allele_freq","beta","OR","LCI","UCI","P-VALUE","P-VALUE(TEXT)")
+  asso.org <- subset(asso, select=c(1,2,3,4,5,8,14,7,9,16:19,12,13))
+  colnames(asso.org) <- c("STUDY ACCESSION","Region","Chr","Pos(hg38)","Locus","rsid","Effect_allele","Effect_allele_freq","Function","beta","OR","LCI","UCI","P-VALUE","P-VALUE(TEXT)")
   asso.org$Effect_allele <- ifelse(asso.org$Effect_allele=="?", NA, asso.org$Effect_allele)
   asso.org$Effect_allele_freq <- ifelse(asso.org$Effect_allele=="NR", NA, asso.org$Effect_allele_freq)
   asso.org$Effect_allele_freq <- as.numeric(asso.org$Effect_allele_freq)
@@ -426,7 +426,7 @@ gwasfilter <- function(efofile="TMP_EFO_LIST.csv", traitfile="TMP_EFO_TRAITS.csv
         SNP_DATABASE <- rbind(SNP_DATABASE, final_snp[[i]])
       }
       if (nrow(SNP_DATABASE)>0) {
-        SNP_DATABASE <- SNP_DATABASE[,c(21,1:20)]
+        SNP_DATABASE <- SNP_DATABASE[,c(24,1:23)]
         file2 = paste0(Sys.Date(), "_snp_database.csv")
         write.csv(SNP_DATABASE, file=file2, row.names=F)
         message(paste0("SNP database has been exported to ", getwd(), "/", file2) )
