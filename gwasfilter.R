@@ -1,20 +1,20 @@
 # gwasfilter
 # Functions: Filtering genome-wide association studies & Obtaining related SNP-trait associations database from GWAS Catalog
-# Date of release: 2020-07-10
-# Authors:  Songchun Yang (Peking University) & Chongyang Li (Dalian Maritime University) 
-# Version: 0.1.3
+# Date of release: 2021-09-10
+# Authors: Chongyang Li (Dalian Maritime University) & Songchun Yang (Peking University)
+# Version: 1.0
 #==========================================================================================================
 message("==================================================================================================")
 message("# Welcome to use gwasfilter !")
-message("# Version: 0.1.3 (for test)")
-message("# Date: 2020-07-10")
+message("# Version: 1.0")
+message("# Date: 2021-09-10")
 message("# Example (total cholesterol):")
 message("source(\"gwasfilter.R\")                       #source R script")
 message("get_gwasdata(path=YOUR_PATH, checknew=TRUE)  #step1: Downloading the GWAS Catalog database")
 message("get_efo(trait=\"Cholesterol\")                 #step2: Querying the EFO ID of a trait")
-message("obtain_trait(efoindex=2, append=T)           #step3: Obtaining all reported traits of an aimed trait")
-message("store_trait(traitindex=c(1,2,7,8,12))        #step4: Storing the right reported traits of an aimed trait")
-message("gwasfilter(efofile=\"TMP_EFO_LIST.csv\", traitfile=\"TMP_EFO_TRAITS.csv\", exclude0=F, replication=T, sample=0, ancestry.eas=T, eas.only=F, journal=c(1), association=T)")
+message("obtain_trait(efoindex=1, append=T)           #step3: Obtaining all reported traits of an aimed trait")
+message("store_trait(traitindex=c(1,2,11,12))         #step4: Storing the right reported traits of an aimed trait")
+message("gwasfilter(efofile=\"TMP_EFO_LIST.csv\", traitfile=\"TMP_EFO_TRAITS.csv\", exclude0=F, replication=T, sample=0, ancestry.eas=T, eas.only=F, journal=c(1), JCRfile=\"Catalog_JCR_2018.csv\", association=T)")
 message("                                             #step5: Starting filtering GWASs on the basis of self-defined criterions")
 message("==================================================================================================")
 
@@ -30,6 +30,7 @@ require_packages <- function(pkg) {
 require_packages(pkg="readr")
 require_packages(pkg="dplyr")
 require_packages(pkg="stringr")
+require_packages(pkg="data.table")
 
 check_allele <- function(allele_vector){
   a <- gsub("A","1",allele_vector)
@@ -44,12 +45,15 @@ check_allele <- function(allele_vector){
 
 ## Function 1: Downloading or refreshing the GWAS Catalog database
 get_gwasdata <- function(path, checknew=TRUE) {
+  options(warn = -1)   # ignored all warnings 
   FURL <- "https://www.ebi.ac.uk/gwas/api/search/downloads/"
   DFS <- c("studies_alternative", "alternative", "ancestry")
   ck.path <- try (is.null(path), silent=TRUE)
   if (class(ck.path)=="try-error") {
     path <- getwd()
-    message(paste("Downloading GWAS Catalog Databases to", path, "as default."))
+    if (checknew==TRUE){
+      message(paste("Downloading GWAS Catalog Databases to", path, "as default."))
+    }
   } else {
     dir.create(path)
   }
@@ -61,8 +65,8 @@ get_gwasdata <- function(path, checknew=TRUE) {
   } else {
     if (checknew==TRUE) {
       download.file(url=paste0(FURL, DFS[1]), destfile=paste0(path, "/", DFS[1], ".tmp"))
-      OLD <- read_tsv(file = paste0(path, "/", DFS[1]))
-      NEW <- read_tsv(file = paste0(path, "/", DFS[1], ".tmp"))
+      OLD <- read.delim(file = paste0(path, "/", DFS[1]), h=T, sep="\t", as.is=T, check.names=F)
+      NEW <- read.delim(file = paste0(path, "/", DFS[1], ".tmp"), h=T, sep="\t", as.is=T, check.names=F)
       if ( nrow(NEW) > nrow(OLD) ) {
         file.rename(paste0(path, "/", DFS[1], ".tmp"), paste0(path, "/", DFS[1]))
         message("==================================")
@@ -79,11 +83,11 @@ get_gwasdata <- function(path, checknew=TRUE) {
     }
   }
   catalog_df <- list()
-  catalog_df[[1]] <- read_tsv(file = paste0(path, "/", DFS[1]), progress=FALSE)
+  catalog_df[[1]] <- read.delim(file = paste0(path, "/", DFS[1]), h=T, sep="\t", as.is=T, check.names=F)
   catalog_study <- catalog_df[[1]]
   save(catalog_study, file="catalog_study.RData")
-  catalog_df[[2]] <- read_tsv(file = paste0(path, "/", DFS[2]), progress=FALSE)
-  catalog_df[[3]] <- read_tsv(file = paste0(path, "/", DFS[3]), progress=FALSE)
+  catalog_df[[2]] <- fread(file = paste0(path, "/", DFS[2]), header=T, quote="")
+  catalog_df[[3]] <- read.delim(file = paste0(path, "/", DFS[3]), h=T, sep="\t", as.is=T, check.names=F)
   
   df <- subset(catalog_df[[1]], select=c("MAPPED_TRAIT","MAPPED_TRAIT_URI","DISEASE/TRAIT"))
   df$EFO <- gsub("http://www.ebi.ac.uk/efo/", "", df$MAPPED_TRAIT_URI)
@@ -115,7 +119,7 @@ get_gwasdata <- function(path, checknew=TRUE) {
   catalog_ances$is_TRA <- ifelse(catalog_ances$ances_count>1, 1, 0)
   save(catalog_ances, file="catalog_ancestry.RData")
   
-  asso <- as.data.frame(catalog_df[[2]][, c(37, 11, 12, 13, 15, 21, 27, 22, 25, 31, 32, 28, 30)])
+  asso <- as.data.frame(catalog_df[[2]][, c(37, 12, 13, 21, 27, 22, 31, 32, 28, 30)])
   EA <- as.data.frame(str_split_fixed(asso$`STRONGEST SNP-RISK ALLELE`, "-", 2), stringsAsFactors=F)
   asso$EA <- as.character(EA[,2])
   asso[grep("increase", asso$`95% CI (TEXT)`), "beta_symbol"] <- 1
@@ -128,8 +132,8 @@ get_gwasdata <- function(path, checknew=TRUE) {
   CI3 <- as.data.frame(str_split_fixed(CI2, "-", 2))
   asso$LCI <- as.numeric(as.character(CI3[,1]))
   asso$UCI <- as.numeric(as.character(CI3[,2]))
-  asso.org <- subset(asso, select=c(1,2,3,4,5,8,14,7,9,16:19,12,13))
-  colnames(asso.org) <- c("STUDY ACCESSION","Region","Chr","Pos(hg38)","Locus","rsid","Effect_allele","Effect_allele_freq","Function","beta","OR","LCI","UCI","P-VALUE","P-VALUE(TEXT)")
+  asso.org <- subset(asso, select=c(1,2,3,6,11,5,13:16,9,10))
+  colnames(asso.org) <- c("STUDY ACCESSION","Chr","Pos(hg38)","rsid","Effect_allele","Effect_allele_freq","beta","OR","LCI","UCI","P-VALUE","P-VALUE(TEXT)")
   asso.org$Effect_allele <- ifelse(asso.org$Effect_allele=="?", NA, asso.org$Effect_allele)
   asso.org$Effect_allele_freq <- ifelse(asso.org$Effect_allele=="NR", NA, asso.org$Effect_allele_freq)
   asso.org$Effect_allele_freq <- as.numeric(asso.org$Effect_allele_freq)
@@ -144,20 +148,22 @@ get_gwasdata <- function(path, checknew=TRUE) {
   asso.org$betaOR.missing <- ifelse(is.na(asso.org$beta) & is.na(asso.org$OR), 1, 0)
   asso.org$P.missing <- ifelse(is.na(asso.org$`P-VALUE`), 1, 0)
   save(asso.org, file="catalog_associations.RData")
-  return(catalog_df)
+  #return(catalog_df)
 }
 
 ## Function 2: Querying the EFO ID of a trait 
 get_efo <- function(trait){
+  options(warn = 0)
   load("TRAIT_EFO.RData")
   INDEX <- grep(pattern=trait, x=TRAIT_EFO$MAPPED_TRAIT, ignore.case=TRUE)
   TRAIT.EFO <- TRAIT_EFO[INDEX, c("MAPPED_TRAIT","EFO")]
-  #print(TRAIT.EFO)
+  write.csv(TRAIT.EFO, file="tmp_get_efo2.csv", row.names=F)
+  TRAIT.EFO <- read_csv("tmp_get_efo2.csv")
   save(TRAIT.EFO, file="TMP_TRAIT_EFO.RData")
   write.csv(TRAIT.EFO, file="tmp_get_efo.csv")
-  message("============================================")
-  message("For details please view file tmp_get_efo.csv")
-  message("============================================")
+  message("==============================================")
+  message("For details please view file ./tmp_get_efo.csv")
+  message("==============================================")
   return(TRAIT.EFO)
 }
 
@@ -167,7 +173,6 @@ obtain_trait <- function(efolist, efoindex, append = T){
   if ( class(ck1)=="try-error" ) {
     load("TMP_TRAIT_EFO.RData")
     efolist <- TRAIT.EFO
-    #efolist <- read.csv("tmp_get_efo.csv", as.is=T, header=T)
     efolist$N_reported.traits <- NA
   }
   AIM_EFO <- as.character(efolist[efoindex, "EFO"])
@@ -176,7 +181,7 @@ obtain_trait <- function(efolist, efoindex, append = T){
   if (ck2 == -1) {
     TMP_EFO_LIST <- efolist[efoindex, ]
   } else {
-    tmp <- read.csv("TMP_EFO_LIST.csv", header=TRUE, as.is=TRUE)		
+    tmp <- read.csv("TMP_EFO_LIST.csv", header=TRUE, as.is=TRUE)        
     if ( AIM_EFO %in% tmp$EFO == FALSE ) {
       TMP_EFO_LIST <- rbind(tmp, efolist[efoindex, ])
     } else {
@@ -184,23 +189,22 @@ obtain_trait <- function(efolist, efoindex, append = T){
     }
   }
   
-  ##add in v0.1.2
   if(!append){
     TMP_EFO_LIST = TMP_EFO_LIST[dim(TMP_EFO_LIST)[1],]
   }
-  ##
   
   write.csv(TMP_EFO_LIST, file="TMP_EFO_LIST.csv", row.names=FALSE)
   load("EFO_TRAIT_INFO.RData")
   INDEX <- grep(pattern=AIM_EFO, x=EFO_TRAIT_INFO$EFO)
   SUB <- EFO_TRAIT_INFO[INDEX, ]
   SUB2 <- SUB[!duplicated(SUB$`DISEASE/TRAIT`), ]
-  #print(SUB2)
   save(SUB2, file="TMP_REPORTED_TRAIT.RData")
+  write.csv(SUB2, file="tmp_obtain_trait2.csv", row.names=F)
+  SUB2 <- read_csv("tmp_obtain_trait2.csv")
   write.csv(SUB2, file="tmp_obtain_trait.csv")
-  message("=================================================")
-  message("For details please view file tmp_obtain_trait.csv")
-  message("=================================================")
+  message("===================================================")
+  message("For details please view file ./tmp_obtain_trait.csv")
+  message("===================================================")
   save(AIM_EFO, file="TMP_AIM_EFO.RData")
   return(SUB2)
 }
@@ -212,7 +216,7 @@ store_trait <- function(aim.efo, traitlist, traitindex){
     load("TMP_AIM_EFO.RData")
   } else {
     AIM_EFO <- aim.efo
-  }	
+  } 
   ck2 <- try(is.null(traitlist), silent=TRUE)
   if ( class(ck2)=="try-error") {
     load("TMP_REPORTED_TRAIT.RData")
@@ -233,16 +237,30 @@ store_trait <- function(aim.efo, traitlist, traitindex){
     TMP_EFO_TRAITS <- tmp2[!duplicated(tmp2),]
   }
   write.csv(TMP_EFO_TRAITS, file="TMP_EFO_TRAITS.csv", row.names=FALSE)
-  #print(TMP_EFO_LIST)
   return(TMP_EFO_LIST)
 }
 
 ## Function 5: Starting filtering GWASs on the basis of self-defined criterions
-gwasfilter <- function(efofile="TMP_EFO_LIST.csv", traitfile="TMP_EFO_TRAITS.csv", exclude0=F, replication=F, sample=0, ancestry.eas=F, eas.only=F, journal=c(1,2,3,4,9), association=F) {
+gwasfilter <- function(efofile="TMP_EFO_LIST.csv", traitfile="TMP_EFO_TRAITS.csv", 
+  exclude0=F, replication=F, sample=0, ancestry.eas=F, eas.only=F, 
+  journal=c(1,2,3,4,9,NA), JCRfile="Catalog_JCR_2018.csv", association=F) {
   load("catalog_study.RData")
   load("catalog_ancestry.RData")
   load("catalog_associations.RData")
-  journal_rank <- read.csv(file="Catalog_JCR_2018.csv", header=TRUE, as.is=TRUE)
+
+  ck <- file.access(JCRfile, mode = 0)
+  if (ck==-1) {
+    message(paste0("WARNING: The journal information file ", JCRfile," is not available. 
+      Running as no filtering based on the journal features."))
+    message("NOTE: The reference file 'Catalog_JCR_2018.csv' can be downloaded from https://github.com/lab319/gwas_filter.")
+    journal <- c(1,2,3,4,9,NA)
+    journal_rank <- c()
+  } else {
+    message(paste0("Using journal information from ", JCRfile))
+    message("NOTE: If you want to use the latest JCR imformation, please update this file manually 
+      or visit our website (https://github.com/lab319/gwas_filter) to check if there are any updated files.")
+    journal_rank <- read.csv(file=JCRfile, header=TRUE, as.is=TRUE)
+  }
 
   qctab <- read.csv(efofile, header=TRUE, as.is=TRUE)
   kept_traits <- read.csv(traitfile, header=TRUE, as.is=TRUE)
@@ -299,7 +317,7 @@ gwasfilter <- function(efofile="TMP_EFO_LIST.csv", traitfile="TMP_EFO_TRAITS.csv
       keep_study1 <- catalog_study[keep1, ]
       qctab[i, "EFO_record"] <- nrow(keep_study1)
       if ( nrow(keep_study1)==0 ) {
-        message("Warning message:")
+        message("WARNING:")
         message(paste("Trait", i, ":", TraitID, "EFO has no merged record"))
         qctab[i, "status"] <- 0
       } else {
@@ -307,7 +325,7 @@ gwasfilter <- function(efofile="TMP_EFO_LIST.csv", traitfile="TMP_EFO_TRAITS.csv
         keep_study2 <- keep_study1[keep_study1$`DISEASE/TRAIT` %in% right_traits_name, ]
         qctab[i,"merged_record"] <- nrow(keep_study2)
         if ( nrow(keep_study2)==0 ) {
-          message("Warning message:")
+          message("WARNING:")
           message(paste("Trait", i, ":", TraitID, "reported traits has no merged record"))
           qctab[i, "status"] <- 0
         } else {
@@ -316,7 +334,7 @@ gwasfilter <- function(efofile="TMP_EFO_LIST.csv", traitfile="TMP_EFO_TRAITS.csv
             ck1 <- nrow(keep_study2[keep_study2$`DISEASE/TRAIT`==NAME,])
             kept_traits[kept_traits$EFO==EFO & kept_traits$reported.traits==NAME, "N_merged_record"] <- ck1
             if (ck1==0) {
-              message("Warning message:")
+              message("WARNING:")
               message(paste("Trait", i, ":", TraitID, "reported trait", NAME, "has no merged record"))
             }
           }
@@ -344,10 +362,13 @@ gwasfilter <- function(efofile="TMP_EFO_LIST.csv", traitfile="TMP_EFO_TRAITS.csv
                 keep_study3[x2, "is_EAS"] <- catalog_ances[catalog_ances$`STUDY ACCESSION`==GCST, "is_EAS"]
                 keep_study3[x2, "is_TRA"] <- catalog_ances[catalog_ances$`STUDY ACCESSION`==GCST, "is_TRA"]
               }
-              JOUR = as.character(keep_study3[x2, "JOURNAL"])
-              ck.jour <- journal_rank[journal_rank$JOURNAL==JOUR, ]
-              if (nrow(ck.jour)>0) {
-                keep_study3[x2, "JCRrank"] <- journal_rank[journal_rank$JOURNAL==JOUR, "JCRrank"]
+              # checking if journal_rank is null (when the journal information file is not available)
+              if (!is.null(journal_rank)) {
+                JOUR = as.character(keep_study3[x2, "JOURNAL"])
+                ck.jour <- journal_rank[journal_rank$JOURNAL==JOUR, ]
+                if (nrow(ck.jour)>0) {
+                  keep_study3[x2, "JCRrank"] <- journal_rank[journal_rank$JOURNAL==JOUR, "JCRrank"]
+                }
               }
             }
             qctab[i, "is_replicated"] <- sum(keep_study3$replicated)
@@ -426,14 +447,14 @@ gwasfilter <- function(efofile="TMP_EFO_LIST.csv", traitfile="TMP_EFO_TRAITS.csv
         SNP_DATABASE <- rbind(SNP_DATABASE, final_snp[[i]])
       }
       if (nrow(SNP_DATABASE)>0) {
-        SNP_DATABASE <- SNP_DATABASE[,c(24,1:23)]
+        SNP_DATABASE <- SNP_DATABASE[,c(21,1:20)]
         file2 = paste0(Sys.Date(), "_snp_database.csv")
         write.csv(SNP_DATABASE, file=file2, row.names=F)
         message(paste0("SNP database has been exported to ", getwd(), "/", file2) )
-      }		
+      }     
     }
   } else {
-    message("[Warning] No study has been kept after filtering. Maybe try another filtering strategy.")
+    message("WARNING: No study has been kept after filtering. Maybe try another filtering strategy.")
   }
   
   file3 = paste0(Sys.Date(), "_qc_table1.csv")
